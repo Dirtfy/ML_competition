@@ -2,3 +2,4 @@ venv/
 Data/
 test.ipynb
 __pycache__/
+train/
