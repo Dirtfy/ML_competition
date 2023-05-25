@@ -17,7 +17,7 @@ def save_train_result(model, path, name, optimizer, criterion, batch_size, shuff
     f.write("epoch: \n"+str(epoch)+"\n\n")
     f.close()
 
-    torch.save(model.head.state_dict(), path+"/"+name+".pt")
+    torch.save(model.state_dict(), path+"/"+name+".pt")
 
 class StanfordModel(nn.Module):
     def __init__(self, device='cpu'):
@@ -165,6 +165,6 @@ class StanfordModel(nn.Module):
         print(f'accuracy : {correct_top1/total_cnt}, average loss : {loss_sum/total_cnt}')
 
     def load_weight(self, path):
-        self.head.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path))
 
     
