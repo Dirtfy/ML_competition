@@ -81,11 +81,12 @@ class StanfordModel(nn.Module):
                                           num_workers=1)
         
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lr_func)
+
+        epoch_cnt = len(train_set)
         
         for ep in range(epoch):   # 데이터셋을 수차례 반복합니다.
             self.train()
             
-            epoch_cnt = 0
             epoch_cor_cnt = 0
             epoch_loss_sum = 0.0
             for j, datas in enumerate(dataloader):
@@ -105,42 +106,21 @@ class StanfordModel(nn.Module):
                 loss.backward()
                 optimizer.step()
 
-                with torch.no_grad():
-                    self.eval()
+                batch_avg_loss, batch_acc, batch_cnt = self.test(datas)
 
-                    batch_cnt = 0
-                    batch_cor_cnt = 0
-                    
-                    for i, image in enumerate(datas[0]):
-                        batch_cnt+=1
-
-                        # [inputs, labels]의 목록인 data로부터 입력을 받은 후;
-                        image = image.to(self.device)  # [100, 3, 224, 224]
-                        label = datas[1][i]
-                        label = label.to(self.device)  # [100]
-
-                        # 순전파 + 역전파 + 최적화를 한 후
-                        output = self.forward(image[None, ...])
-                        output = output.squeeze()
-                        label = label.squeeze()
-
-                        pred = torch.argmax(output)
-                        batch_cor_cnt += label[pred]
-
-                epoch_cnt += batch_cnt
-                epoch_cor_cnt += batch_cor_cnt
+                epoch_cor_cnt += batch_cnt
 
                 # 통계를 출력합니다.
                 epoch_loss_sum += loss.item()
                 
-                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}], loss: {loss.item()}, batch_acc: {batch_cor_cnt/batch_cnt}')
+                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}], batch_avg_loss: {batch_avg_loss}, batch_acc: {batch_acc}')
 
             scheduler.step()
 
             print(f'[epoch: {ep + 1}] train_avg_loss: {epoch_loss_sum/epoch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
 
-            print('eval...')
-            test_acc, test_avg_loss = self.test(test_set)
+            print('evaluating...')
+            test_avg_loss, test_acc, _ = self.test(test_set)
             print(f'[epoch: {ep + 1}] test_avg_loss: {test_avg_loss}, test_acc: {test_acc}')
 
         save_train_result(self, path, name, optimizer, criterion, batch_size, shuffle, epoch)
@@ -176,9 +156,10 @@ class StanfordModel(nn.Module):
                 if prt:
                     print(f'[{i + 1}] accuracy: {correct_top1/total_cnt}, loss: {loss.item():}')
 
-        print(f'accuracy : {correct_top1/total_cnt}, average loss : {loss_sum/total_cnt}')
+        if prt:
+            print(f'average loss : {loss_sum/total_cnt}, accuracy : {correct_top1/total_cnt}')
 
-        return correct_top1/total_cnt , loss_sum/total_cnt
+        return loss_sum/total_cnt, correct_top1/total_cnt, correct_top1
 
     def load_weight(self, path):
         self.load_state_dict(torch.load(path))
