@@ -56,6 +56,8 @@ class StanfordModel(nn.Module):
 
             nn.ELU(),
 
+            nn.Dropout(0.1),
+
             nn.Linear(
             in_features = 256,
             out_features = self.__num_classes
@@ -175,7 +177,7 @@ class StanfordModel(nn.Module):
 
                 if prt:
                     print(f'[{i + 1}] accuracy: {correct_top1/total_cnt}, loss: {loss.item():}')
-
+        
         print(f'accuracy : {correct_top1/total_cnt}, average loss : {loss_sum/total_cnt}')
 
         return correct_top1/total_cnt , loss_sum/total_cnt
