@@ -3,8 +3,6 @@ import timm
 import torch
 import torch.nn as nn
 
-import numpy as np
-
 def save_train_result(model, path, name, optimizer, criterion, batch_size, shuffle, epoch):
     os.makedirs(path, exist_ok=False)
 
@@ -19,6 +17,12 @@ def save_train_result(model, path, name, optimizer, criterion, batch_size, shuff
 
     torch.save(model.state_dict(), path+"/"+name+".pt")
 
+def lr_func(epoch):
+    if epoch < 3:
+        return 0.00005
+    else:
+        return 0.00005 * (0.95 ** (epoch-2))
+
 class StanfordModel(nn.Module):
     def __init__(self, device='cpu'):
         super().__init__()
@@ -27,6 +31,7 @@ class StanfordModel(nn.Module):
         self.device = device
 
         self.backbone = timm.models.vit_base_patch16_224(pretrained=True).to(device)
+        
         for param in self.backbone.parameters():
             param.requires_grad = False
         for param in self.backbone.head.parameters():
@@ -40,9 +45,9 @@ class StanfordModel(nn.Module):
             out_features = 512
             ),
 
-            # nn.BatchNorm1d(num_features=512),
-
             nn.ELU(),
+
+            nn.Dropout(0.25),
 
             nn.Linear(
             in_features = 512,
@@ -54,9 +59,7 @@ class StanfordModel(nn.Module):
             nn.Linear(
             in_features = 256,
             out_features = self.__num_classes
-            ),
-
-            nn.Softmax()
+            )
         ).to(device)
 
         self.params = list(self.backbone.head.parameters()) + list(self.head.parameters())
@@ -66,19 +69,22 @@ class StanfordModel(nn.Module):
         x = self.head(x)
         return x
     
-    def c_train(self, epoch, dataset, learning_rate, batch_size, shuffle, path, name, optimizer=None, criterion=None):
+    def c_train(self, epoch, train_set, test_set, learning_rate, batch_size, shuffle, path, name, optimizer=None, criterion=None):
         if optimizer == None:
             optimizer = torch.optim.Adam(self.params, lr=learning_rate)
         if criterion == None:
             criterion = torch.nn.CrossEntropyLoss()
 
-        dataloader = torch.utils.data.DataLoader(dataset,
+        dataloader = torch.utils.data.DataLoader(train_set,
                                           batch_size=batch_size,
                                           shuffle=shuffle,
                                           num_workers=1)
         
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lr_func)
+        
         for ep in range(epoch):   # 데이터셋을 수차례 반복합니다.
-
+            self.train()
+            
             epoch_cnt = 0
             epoch_cor_cnt = 0
             epoch_loss_sum = 0.0
@@ -122,18 +128,24 @@ class StanfordModel(nn.Module):
                         batch_cor_cnt += label[pred]
 
                 epoch_cnt += batch_cnt
-                epoch_cor_cnt += batch_cor_cnt                   
+                epoch_cor_cnt += batch_cor_cnt
 
                 # 통계를 출력합니다.
                 epoch_loss_sum += loss.item()
                 
-                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}] loss: {loss.item()}, batch_acc: {batch_cor_cnt/batch_cnt}')
+                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}], loss: {loss.item()}, batch_acc: {batch_cor_cnt/batch_cnt}')
 
-            print(f'[epoch: {ep + 1}] epoch_loss_sum: {epoch_loss_sum}, epoch_acc: {epoch_cor_cnt/epoch_cnt}')
+            scheduler.step()
+
+            print(f'[epoch: {ep + 1}] train_avg_loss: {epoch_loss_sum/epoch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
+
+            print('eval...')
+            test_acc, test_avg_loss = self.test(test_set)
+            print(f'[epoch: {ep + 1}] test_avg_loss: {test_avg_loss}, test_acc: {test_acc}')
 
         save_train_result(self, path, name, optimizer, criterion, batch_size, shuffle, epoch)
 
-    def test(self, dataset, criterion=None):
+    def test(self, dataset, criterion=None, prt=False):
         if criterion == None:
             criterion = torch.nn.CrossEntropyLoss()
 
@@ -160,9 +172,13 @@ class StanfordModel(nn.Module):
                 correct_top1 += label[pred]
                 
                 total_cnt += 1
-                print(f'[{i + 1}] accuracy: {correct_top1/total_cnt}, loss: {loss.item():}')
+
+                if prt:
+                    print(f'[{i + 1}] accuracy: {correct_top1/total_cnt}, loss: {loss.item():}')
 
         print(f'accuracy : {correct_top1/total_cnt}, average loss : {loss_sum/total_cnt}')
+
+        return correct_top1/total_cnt , loss_sum/total_cnt
 
     def load_weight(self, path):
         self.load_state_dict(torch.load(path))

@@ -11,7 +11,7 @@ def toOne_hot(x):
   return torch.FloatTensor(np.array(F.one_hot(x, 120)))
 
 class StanfordDataset(Dataset): 
-  def __init__(self, src):
+  def __init__(self, src, resol):
 
     self.normalize = transforms.Normalize(
       mean=[0.5, 0.5, 0.5],
@@ -19,10 +19,10 @@ class StanfordDataset(Dataset):
       )
     
     self.transform = transforms.Compose(
-      [transforms.Resize(256),
-       transforms.CenterCrop(224),
+      [transforms.Resize(int(resol/0.875)),
+       transforms.CenterCrop(resol),
        transforms.ToTensor(),
-       self.normalize,
+       self.normalize
        ])
     self.target_transfrom = transforms.Compose([
         transforms.Lambda(toTensor),
