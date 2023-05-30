@@ -1,6 +1,6 @@
 # ML_competition
 
-[Stanford Dogs Dataset test colab](https://drive.google.com/file/d/1cYlUeASBOqrs-Nc4LoYkWjiQkRWb3D_g/view?usp=sharing)
+[Stanford Dogs Dataset test colab](https://colab.research.google.com/drive/1cYlUeASBOqrs-Nc4LoYkWjiQkRWb3D_g)
 
 <img width="80%" src="https://github.com/Dirtfy/ML_competition/assets/96651474/00518ef8-188d-4a1e-9f55-392c2eb04d54"/>
 
