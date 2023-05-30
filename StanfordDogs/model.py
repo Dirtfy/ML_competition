@@ -22,7 +22,7 @@ def lr_func(epoch):
     if epoch < 3:
         return 1
     else:
-        return (0.95 ** (epoch-2))
+        return (0.85 ** (epoch-2))
 
 class StanfordModel(nn.Module):
     def __init__(self, device='cpu'):
@@ -50,7 +50,7 @@ class StanfordModel(nn.Module):
 
             nn.ELU(),
 
-            nn.Dropout(0.25),
+            nn.Dropout(0.5),
 
             nn.Linear(
             in_features = 512,
@@ -59,7 +59,7 @@ class StanfordModel(nn.Module):
 
             nn.ELU(),
 
-            nn.Dropout(0.1),
+            nn.Dropout(0.25),
 
             nn.Linear(
             in_features = 256,
