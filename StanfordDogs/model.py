@@ -22,7 +22,7 @@ def lr_func(epoch):
     if epoch < 3:
         return 1
     else:
-        return (0.85 ** (epoch-2))
+        return (0.95 ** (epoch-2))
 
 class StanfordModel(nn.Module):
     def __init__(self, device='cpu'):
@@ -32,51 +32,20 @@ class StanfordModel(nn.Module):
         self.__num_classes = 120
         self.device = device
 
-        # pre train model: vit_base_patch16_224
-        self.backbone = timm.models.vit_base_patch16_224(pretrained=True).to(device)
-        # 헤드 부분만 학습
-        for param in self.backbone.parameters():
-            param.requires_grad = False
-        for param in self.backbone.head.parameters():
+        # model: vit_base_patch16_224
+        self.model = timm.models.vit_base_patch16_224(pretrained=False).to(device)
+        self.model.head = nn.Linear(in_features=768, out_features=self.__num_classes).to(device)
+
+        # 전체 학습
+        for param in self.model.parameters():
             param.requires_grad = True
 
-        self.head = nn.Sequential(
-            nn.BatchNorm1d(num_features=1000),
-
-            nn.Linear(
-            in_features = 1000,
-            out_features = 512
-            ),
-
-            nn.ELU(),
-
-            nn.Dropout(0.5),
-
-            nn.Linear(
-            in_features = 512,
-            out_features = 256
-            ),
-
-            nn.ELU(),
-
-            nn.Dropout(0.25),
-
-            nn.Linear(
-            in_features = 256,
-            out_features = self.__num_classes
-            )
-        ).to(device)
-
-        self.params = list(self.backbone.head.parameters()) + list(self.head.parameters())
-
     def forward(self, x):
-        x = self.backbone(x)
-        x = self.head(x)
-        return x
+        return self.model(x)
     
     def c_train(self, epoch, train_set, test_set, learning_rate, batch_size, shuffle, path, name, optimizer=None, criterion=None):
         if optimizer == None:
-            optimizer = torch.optim.Adam(self.params, lr=learning_rate)
+            optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
         if criterion == None:
             criterion = torch.nn.CrossEntropyLoss()
 
@@ -89,6 +58,7 @@ class StanfordModel(nn.Module):
 
         epoch_cnt = len(train_set)
         
+        pre_test_acc = 0
         for ep in range(epoch):   # 데이터셋을 수차례 반복합니다.
             self.train()
             
@@ -131,6 +101,13 @@ class StanfordModel(nn.Module):
             print('evaluating...')
             test_avg_loss, test_acc, _ = self.test(test_set)
             print(f'[epoch: {ep + 1}] test_avg_loss: {test_avg_loss}, test_acc: {test_acc}')
+
+            if pre_test_acc/5 > test_acc:
+                epoch = ep
+                break
+            pre_test_acc += test_acc
+            if ep%5 == 0:
+                pre_test_acc = 0
 
         # 모델 저장
         save_train_result(self, path, name, optimizer, criterion, batch_size, shuffle, epoch)
