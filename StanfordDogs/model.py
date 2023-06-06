@@ -1,28 +1,9 @@
-import os
 import timm
 import torch
 import torch.nn as nn
 
-def save_train_result(model, path, name, optimizer, criterion, batch_size, shuffle, epoch):
-    os.makedirs(path, exist_ok=False)
-
-    f = open(path+"/"+name+".txt", "w")
-    f.write("model: \n"+str(model)+"\n\n")
-    f.write("optimizer: \n"+str(optimizer)+"\n\n")
-    f.write("criterion: \n"+str(criterion)+"\n\n")
-    f.write("batch_size: \n"+str(batch_size)+"\n\n")
-    f.write("shuffle: \n"+str(shuffle)+"\n\n")
-    f.write("epoch: \n"+str(epoch)+"\n\n")
-    f.close()
-
-    torch.save(model.state_dict(), path+"/"+name+".pt")
-
-# 학습률 조정
-def lr_func(epoch):
-    if epoch < 3:
-        return 1
-    else:
-        return (0.95 ** (epoch-2))
+import util
+import stopper
 
 class StanfordModel(nn.Module):
     def __init__(self, device='cpu'):
@@ -33,32 +14,49 @@ class StanfordModel(nn.Module):
         self.device = device
 
         # model: vit_base_patch16_224
-        self.model = timm.models.vit_base_patch16_224(pretrained=False).to(device)
-        self.model.head = nn.Linear(in_features=768, out_features=self.__num_classes).to(device)
+        self.backbone = timm.create_model('resnet200d', pretrained=True).to(device)
+        # self.backbone.fc = nn.Linear(in_features=2048, out_features=self.__num_classes, bias=True).to(device)
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(num_features=1000),
+            nn.Linear(in_features=1000, out_features=512),
+            nn.ELU(),
+            nn.Dropout(),
+
+            nn.BatchNorm1d(num_features=512),
+            nn.Linear(in_features=512, out_features=256),
+            nn.ELU(),
+            nn.Dropout(),
+
+            nn.Linear(in_features=256, out_features=self.__num_classes)
+        ).to(device)
+        # self.backbone.head = nn.Linear(in_features=768, out_features=self.__num_classes).to(device)
 
         # 전체 학습
-        for param in self.model.parameters():
-            param.requires_grad = True
+        # for param in self.backbone.parameters():
+        #     param.requires_grad = True
 
     def forward(self, x):
-        return self.model(x)
+        x = self.backbone(x)
+        x = self.head(x)
+        return x
     
     def c_train(self, epoch, train_set, test_set, learning_rate, batch_size, shuffle, path, name, optimizer=None, criterion=None):
         if optimizer == None:
             optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
         if criterion == None:
-            criterion = torch.nn.CrossEntropyLoss()
+            criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.3)
 
         dataloader = torch.utils.data.DataLoader(train_set,
                                           batch_size=batch_size,
                                           shuffle=shuffle,
-                                          num_workers=1)
+                                          num_workers=4)
         
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lr_func)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = util.lr_func)
+
+        early = stopper.EarlyStop(10)
 
         epoch_cnt = len(train_set)
         
-        pre_test_acc = 0
         for ep in range(epoch):   # 데이터셋을 수차례 반복합니다.
             self.train()
             
@@ -77,6 +75,8 @@ class StanfordModel(nn.Module):
 
                 # 순전파 + 역전파 + 최적화
                 outputs = self.forward(images)
+                # print(outputs.squeeze())
+                # print(labels.squeeze())
                 loss = criterion(outputs.squeeze(), labels.squeeze())
                 loss.backward()
                 optimizer.step()
@@ -96,21 +96,21 @@ class StanfordModel(nn.Module):
 
             # 에포크 결과 출력
             print(f'[epoch: {ep + 1}] train_avg_loss: {epoch_loss_sum/epoch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
+            early.train_loss_list += [epoch_loss_sum/epoch_cnt]
+            early.train_acc_list += [epoch_cor_cnt/epoch_cnt]
 
             # test_dataset 결과 계산 및 출력
             print('evaluating...')
             test_avg_loss, test_acc, _ = self.test(test_set)
             print(f'[epoch: {ep + 1}] test_avg_loss: {test_avg_loss}, test_acc: {test_acc}')
+            early.test_loss_list += [test_avg_loss]
+            early.test_acc_list += [test_acc]
 
-            if pre_test_acc/5 > test_acc:
-                epoch = ep
+            if early.stop():
                 break
-            pre_test_acc += test_acc
-            if ep%5 == 0:
-                pre_test_acc = 0
 
         # 모델 저장
-        save_train_result(self, path, name, optimizer, criterion, batch_size, shuffle, epoch)
+        util.save_train_result(self, path, name, optimizer, criterion, batch_size, shuffle, epoch, early)        
 
     def test(self, dataset, criterion=None, prt=False):
         if criterion == None:
