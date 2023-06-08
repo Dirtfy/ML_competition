@@ -10,4 +10,4 @@ class EarlyStop():
 
     def stop(self):
         if len(self.test_acc_list) > self.min_epoch:
-            return self.test_acc_list[-1] <= sum(self.test_acc_list[-(self.min_epoch+1):-1])
+            return self.test_acc_list[-1] <= sum(self.test_acc_list[-(self.min_epoch+1):-1]) / self.min_epoch

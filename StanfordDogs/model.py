@@ -1,6 +1,7 @@
 import timm
 import torch
 import torch.nn as nn
+import copy
 
 import util
 import stopper
@@ -13,9 +14,9 @@ class StanfordModel(nn.Module):
         self.__num_classes = 120
         self.device = device
 
-        # model: vit_base_patch16_224
+        # self.backbone = timm.models.convit.convit_base(pretrained=True).to(device)
+        # self.backbone = timm.create_model('deit_base_distilled_patch16_384', pretrained=True).to(device)
         self.backbone = timm.create_model('resnet200d', pretrained=True).to(device)
-        # self.backbone.fc = nn.Linear(in_features=2048, out_features=self.__num_classes, bias=True).to(device)
         self.head = nn.Sequential(
             nn.BatchNorm1d(num_features=1000),
             nn.Linear(in_features=1000, out_features=512),
@@ -29,35 +30,32 @@ class StanfordModel(nn.Module):
 
             nn.Linear(in_features=256, out_features=self.__num_classes)
         ).to(device)
-        # self.backbone.head = nn.Linear(in_features=768, out_features=self.__num_classes).to(device)
-
-        # 전체 학습
-        # for param in self.backbone.parameters():
-        #     param.requires_grad = True
 
     def forward(self, x):
         x = self.backbone(x)
         x = self.head(x)
         return x
     
-    def c_train(self, epoch, train_set, test_set, learning_rate, batch_size, shuffle, path, name, optimizer=None, criterion=None):
+    def train_loop(self, epoch, train_set, test_set, path, name, learning_rate=0.00005, batch_size=16, shuffle=True, optimizer=None, criterion=None, scheduler=None, ls=0.3, wd=0.0, pt=3):
         if optimizer == None:
-            optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
+            optimizer = torch.optim.RAdam(self.parameters(), lr=learning_rate, weight_decay=wd)
         if criterion == None:
-            criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.3)
+            criterion = torch.nn.CrossEntropyLoss(label_smoothing=ls)
+        if scheduler == None:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=pt, cooldown=pt)
 
         dataloader = torch.utils.data.DataLoader(train_set,
                                           batch_size=batch_size,
                                           shuffle=shuffle,
                                           num_workers=4)
-        
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = util.lr_func)
 
-        early = stopper.EarlyStop(10)
+        early = stopper.EarlyStop(pt)
 
         epoch_cnt = len(train_set)
         
-        for ep in range(epoch):   # 데이터셋을 수차례 반복합니다.
+        best_acc = 0
+        best_ep = 0
+        for ep in range(epoch):
             self.train()
             
             epoch_cor_cnt = 0
@@ -65,32 +63,28 @@ class StanfordModel(nn.Module):
             for j, datas in enumerate(dataloader):
                 self.train()
                 
-                # [inputs, labels]의 목록인 data로부터 입력
                 images, labels = datas
                 images = images.to(self.device)
                 labels = labels.to(self.device)
 
-                # 변화도(Gradient) 매개변수를 0으로 만들고
                 optimizer.zero_grad()
 
                 # 순전파 + 역전파 + 최적화
                 outputs = self.forward(images)
-                # print(outputs.squeeze())
-                # print(labels.squeeze())
                 loss = criterion(outputs.squeeze(), labels.squeeze())
                 loss.backward()
                 optimizer.step()
 
-                # 배치 결과 계산 및 출력
+                # 배치 결과 계산
                 tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
-                batch_avg_loss, batch_acc, batch_cnt = self.test(tmp_dataset)
-                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}], batch_avg_loss: {batch_avg_loss}, batch_acc: {batch_acc}')
+                batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
 
                 # 배치 결과 합산
-                epoch_cor_cnt += batch_cnt
-                epoch_loss_sum += loss.item()
-
-            scheduler.step()
+                epoch_cor_cnt += batch_cor
+                epoch_loss_sum += batch_loss
+                # 배치 결과 출력
+                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt}, batch_acc: {batch_cor/batch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
+            
             # learning rate 출력
             print('lr: ', optimizer.param_groups[0]['lr'])
 
@@ -101,16 +95,27 @@ class StanfordModel(nn.Module):
 
             # test_dataset 결과 계산 및 출력
             print('evaluating...')
-            test_avg_loss, test_acc, _ = self.test(test_set)
-            print(f'[epoch: {ep + 1}] test_avg_loss: {test_avg_loss}, test_acc: {test_acc}')
-            early.test_loss_list += [test_avg_loss]
-            early.test_acc_list += [test_acc]
+            test_loss, test_cor, test_cnt = self.test(test_set)
+            print(f'[epoch: {ep + 1}] test_avg_loss: {test_loss/test_cnt}, test_acc: {test_cor/test_cnt}')
+            early.test_loss_list += [test_loss/test_cnt]
+            early.test_acc_list += [test_cor/test_cnt]
 
+            scheduler.step()
+
+            # best model 기록
+            if test_cor/test_cnt > best_acc:
+                best_ep = ep
+                best_acc = test_cor/test_cnt
+                best_acc_model = copy.deepcopy(self.state_dict())
+
+            # early stop
             if early.stop():
+                epoch = ep
                 break
 
         # 모델 저장
-        util.save_train_result(self, path, name, optimizer, criterion, batch_size, shuffle, epoch, early)        
+        util.save_train_result(self, path, name+'_end', optimizer, criterion, batch_size, shuffle, epoch, early, ls, wd, pt)   
+        torch.save(best_acc_model, path+"/"+name+"_best_acc_"+str(best_ep+1)+".pt") 
 
     def test(self, dataset, criterion=None, prt=False):
         if criterion == None:
@@ -123,7 +128,7 @@ class StanfordModel(nn.Module):
         self.eval()
         with torch.no_grad():
             for i, data in enumerate(dataset):
-                # [inputs, labels]의 목록인 data로부터 입력
+
                 image, label = data
                 image = image.to(self.device)
                 label = label.to(self.device)
@@ -133,7 +138,7 @@ class StanfordModel(nn.Module):
                 output = output.squeeze()
                 label = label.squeeze()
                 loss = criterion(output, label)
-                loss_sum += loss
+                loss_sum += loss.item()
 
                 # top-1 확인
                 pred = torch.argmax(output)
@@ -147,7 +152,7 @@ class StanfordModel(nn.Module):
         if prt:
             print(f'average loss : {loss_sum/total_cnt}, accuracy : {correct_top1/total_cnt}')
 
-        return loss_sum/total_cnt, correct_top1/total_cnt, correct_top1
+        return loss_sum, correct_top1, total_cnt
 
     def load_weight(self, path):
         self.load_state_dict(torch.load(path))
