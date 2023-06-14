@@ -1,5 +1,5 @@
 venv/
 Data/
-test.ipynb
+*.ipynb
 __pycache__/
 train/
