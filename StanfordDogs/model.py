@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import copy
 
-import util
-import stopper
+from . import util
+from . import stopper
 
 class StanfordModel(nn.Module):
     def __init__(self, device='cpu'):

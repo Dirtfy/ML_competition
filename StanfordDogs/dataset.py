@@ -3,7 +3,7 @@ import torchvision.transforms as transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import ConcatDataset
 
-import util
+from . import util
 
 class StanfordDataset(Dataset): 
   def __init__(self, src, resol, augmente=False, augmente_time=10):
