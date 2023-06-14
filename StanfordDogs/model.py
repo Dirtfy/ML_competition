@@ -75,13 +75,13 @@ class StanfordModel(nn.Module):
                 epoch_cor_cnt += batch_cor
                 epoch_loss_sum += batch_loss
                 # 배치 결과 출력
-                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt}, batch_acc: {batch_cor/batch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
+                print(f'[epoch: {ep + 1:3d}, batch: {j + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt:.6f}, batch_acc: {batch_cor/batch_cnt:.6f}, train_acc: {epoch_cor_cnt/epoch_cnt:.6f}')
             
             # learning rate 출력
             print('lr: ', optimizer.param_groups[0]['lr'])
 
             # 에포크 결과 출력
-            print(f'[epoch: {ep + 1}] train_avg_loss: {epoch_loss_sum/epoch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
+            print(f'[epoch: {ep + 1:3d}] train_avg_loss: {epoch_loss_sum/epoch_cnt:.6f}, train_acc: {epoch_cor_cnt/epoch_cnt:.6f}')
             early.train_loss_list += [epoch_loss_sum/epoch_cnt]
             early.train_acc_list += [epoch_cor_cnt/epoch_cnt]
 
@@ -97,12 +97,12 @@ class StanfordModel(nn.Module):
                     batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
 
                     # 배치 결과 출력
-                    print(f'[epoch: {ep + 1}, batch: {j + 1:5d}, bad_repeat: {k + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt}, batch_acc: {batch_cor/batch_cnt}')
+                    print(f'[epoch: {ep + 1:3d}, batch: {j + 1:5d}, bad_repeat: {k + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt:.6f}, batch_acc: {batch_cor/batch_cnt:.6f}')
 
             # test_dataset 결과 계산 및 출력
             print('evaluating...')
             test_loss, test_cor, test_cnt = self.test(test_set)
-            print(f'[epoch: {ep + 1}] test_avg_loss: {test_loss/test_cnt}, test_acc: {test_cor/test_cnt}')
+            print(f'[epoch: {ep + 1:3d}] test_avg_loss: {test_loss/test_cnt:.6f}, test_acc: {test_cor/test_cnt:.6f}')
             early.test_loss_list += [test_loss/test_cnt]
             early.test_acc_list += [test_cor/test_cnt]
 
@@ -168,10 +168,10 @@ class StanfordModel(nn.Module):
                 total_cnt += 1
 
                 if prt:
-                    print(f'[{i + 1}] loss: {loss.item():}, accuracy: {correct_top1/total_cnt}')
+                    print(f'[{i + 1:5d}] loss: {loss.item():}, accuracy: {correct_top1/total_cnt:.6f}')
 
         if prt:
-            print(f'average loss : {loss_sum/total_cnt}, accuracy : {correct_top1/total_cnt}')
+            print(f'average loss : {loss_sum/total_cnt:.6f}, accuracy : {correct_top1/total_cnt:.6f}')
 
         return loss_sum, correct_top1, total_cnt
 
