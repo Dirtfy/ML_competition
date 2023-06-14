@@ -15,7 +15,7 @@ def copyTo(image, label, dst):
   os.makedirs(path(dst, label), exist_ok=True)
   shutil.copy2(image, path(dst, label))
 
-def save_train_result(model, path, name, optimizer, criterion, batch_size, shuffle, epoch, early, ls, wd, pt):
+def save_train_result(model, path, name, optimizer, criterion, batch_size, shuffle, epoch, best_ep, early, ls, wd, pt):
     os.makedirs(path, exist_ok=False)
 
     f = open(path+"/"+name+".txt", "w")
@@ -28,6 +28,7 @@ def save_train_result(model, path, name, optimizer, criterion, batch_size, shuff
     f.write("batch_size: \n"+str(batch_size)+"\n\n")
     f.write("shuffle: \n"+str(shuffle)+"\n\n")
     f.write("epoch: \n"+str(epoch)+"\n\n")
+    f.write("best epoch: \n"+str(best_ep+1)+"\n\n")
     f.close()
 
     torch.save(model.state_dict(), path+"/"+name+".pt")
@@ -57,7 +58,7 @@ def lr_func(epoch):
     if epoch < 3:
         return 1
     else:
-        return (0.75 ** (epoch-2))
+        return (0.3 ** (epoch-2))
     
 def detach(list):
     return [v.cpu().numpy() if torch.is_tensor(v) else v for v in list]

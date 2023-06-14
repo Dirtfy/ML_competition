@@ -114,8 +114,8 @@ class StanfordModel(nn.Module):
                 break
 
         # 모델 저장
-        util.save_train_result(self, path, name+'_end', optimizer, criterion, batch_size, shuffle, epoch, early, ls, wd, pt)   
-        torch.save(best_acc_model, path+"/"+name+"_best"+str(best_ep)+".pt") 
+        util.save_train_result(self, path, name+'_end', optimizer, criterion, batch_size, shuffle, epoch, best_ep, early, ls, wd, pt)   
+        torch.save(best_acc_model, path+"/"+name+"_best.pt") 
 
     def test(self, dataset, criterion=None, prt=False):
         if criterion == None:
