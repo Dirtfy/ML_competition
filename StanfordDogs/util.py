@@ -55,10 +55,10 @@ def save_train_result(model, path, name, optimizer, criterion, batch_size, shuff
 
 # 학습률 조정 함수
 def lr_func(epoch):
-    if epoch < 3:
+    if epoch < 2:
         return 1
     else:
-        return (0.3 ** (epoch-2))
+        return (0.75 ** (epoch-1))
     
 def detach(list):
     return [v.cpu().numpy() if torch.is_tensor(v) else v for v in list]

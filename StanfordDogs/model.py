@@ -55,29 +55,22 @@ class StanfordModel(nn.Module):
         
         best_acc = 0
         best_ep = 0
-        for ep in range(epoch):
-            self.train()
-            
+        for ep in range(epoch):            
             epoch_cor_cnt = 0
             epoch_loss_sum = 0.0
+
+            datas_list = []
+            avg_loss_list = []
             for j, datas in enumerate(dataloader):
-                self.train()
-                
-                images, labels = datas
-                images = images.to(self.device)
-                labels = labels.to(self.device)
+                datas_list += [datas]
 
-                optimizer.zero_grad()
-
-                # 순전파 + 역전파 + 최적화
-                outputs = self.forward(images)
-                loss = criterion(outputs.squeeze(), labels.squeeze())
-                loss.backward()
-                optimizer.step()
+                self.train_step(datas, optimizer, criterion)
 
                 # 배치 결과 계산
                 tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
                 batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
+
+                loss_list += [batch_loss/batch_cnt]
 
                 # 배치 결과 합산
                 epoch_cor_cnt += batch_cor
@@ -92,6 +85,23 @@ class StanfordModel(nn.Module):
             print(f'[epoch: {ep + 1}] train_avg_loss: {epoch_loss_sum/epoch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
             early.train_loss_list += [epoch_loss_sum/epoch_cnt]
             early.train_acc_list += [epoch_cor_cnt/epoch_cnt]
+
+            bad_datas = []
+            for j, data in enumerate(datas_list):
+                if avg_loss_list[j] >= (epoch_loss_sum/epoch_cnt)*2:
+                    bad_datas += [data]
+
+            bad_repeat = 100
+            for j, datas in enumerate(bad_datas):
+                for k in range(bad_repeat):
+                    self.train_step(datas, optimizer, criterion)
+
+                    # 배치 결과 계산
+                    tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
+                    batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
+
+                    # 배치 결과 출력
+                    print(f'[epoch: {ep + 1}, batch: {j + 1:5d}, bad_repeat: {k + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt}, batch_acc: {batch_cor/batch_cnt}')
 
             # test_dataset 결과 계산 및 출력
             print('evaluating...')
@@ -116,6 +126,21 @@ class StanfordModel(nn.Module):
         # 모델 저장
         util.save_train_result(self, path, name+'_end', optimizer, criterion, batch_size, shuffle, epoch, best_ep, early, ls, wd, pt)   
         torch.save(best_acc_model, path+"/"+name+"_best.pt") 
+
+    def train_step(self, datas, optimizer, criterion):
+        self.train()
+
+        images, labels = datas
+        images = images.to(self.device)
+        labels = labels.to(self.device)
+
+        optimizer.zero_grad()
+
+        # 순전파 + 역전파 + 최적화
+        outputs = self.forward(images)
+        loss = criterion(outputs.squeeze(), labels.squeeze())
+        loss.backward()
+        optimizer.step()
 
     def test(self, dataset, criterion=None, prt=False):
         if criterion == None:

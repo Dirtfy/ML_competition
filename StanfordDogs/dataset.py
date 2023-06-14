@@ -6,7 +6,7 @@ from torch.utils.data import ConcatDataset
 from . import util
 
 class StanfordDataset(Dataset): 
-  def __init__(self, src, resol, augmente=False, augmente_time=10):
+  def __init__(self, src, resol, augmente=False, augmente_time=1):
 
     self.normalize = transforms.Normalize(
       mean=[0.5, 0.5, 0.5],
