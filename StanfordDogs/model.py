@@ -89,6 +89,11 @@ class StanfordModel(nn.Module):
 
             bad_repeat = 100
             for j, datas in enumerate(bad_datas):
+                tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
+                batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
+                if batch_loss/batch_cnt < bad_threshold:
+                    continue
+                
                 for k in range(bad_repeat):
                     self.train_step(datas, optimizer, criterion)
 
