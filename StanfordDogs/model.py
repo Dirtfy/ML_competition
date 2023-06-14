@@ -14,9 +14,9 @@ class StanfordModel(nn.Module):
         self.__num_classes = 120
         self.device = device
 
-        # self.backbone = timm.models.convit.convit_base(pretrained=True).to(device)
+        self.backbone = timm.create_model('convit_base', pretrained=True).to(device)
         # self.backbone = timm.create_model('deit_base_distilled_patch16_384', pretrained=True).to(device)
-        self.backbone = timm.create_model('resnet200d', pretrained=True).to(device)
+        # self.backbone = timm.create_model('resnet200d', pretrained=True).to(device)
         self.head = nn.Sequential(
             nn.BatchNorm1d(num_features=1000),
             nn.Linear(in_features=1000, out_features=512),
@@ -115,7 +115,7 @@ class StanfordModel(nn.Module):
 
         # 모델 저장
         util.save_train_result(self, path, name+'_end', optimizer, criterion, batch_size, shuffle, epoch, early, ls, wd, pt)   
-        torch.save(best_acc_model, path+"/"+name+"_best.pt") 
+        torch.save(best_acc_model, path+"/"+name+"_best"+str(best_ep)+".pt") 
 
     def test(self, dataset, criterion=None, prt=False):
         if criterion == None:

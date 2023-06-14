@@ -6,7 +6,7 @@ from torch.utils.data import ConcatDataset
 import util
 
 class StanfordDataset(Dataset): 
-  def __init__(self, src, resol, augmente=False):
+  def __init__(self, src, resol, augmente=False, augmente_time=10):
 
     self.normalize = transforms.Normalize(
       mean=[0.5, 0.5, 0.5],
@@ -45,13 +45,17 @@ class StanfordDataset(Dataset):
             self.normalize
         ])
       
-      self.augmented_dataset = ImageFolder(
-        src,
-        transform=self.input_augmente,
-        target_transform=self.target_transfrom
-        )
+      self.augmented_datasets = []
+      for _ in range(augmente_time):
+        self.augmented_datasets += [
+          ImageFolder(
+          src,
+          transform=self.input_augmente,
+          target_transform=self.target_transfrom
+          )
+        ]
       
-      self.dataset = ConcatDataset([self.origin_dataset, self.augmented_dataset])
+      self.dataset = ConcatDataset([self.origin_dataset] + self.augmented_datasets)
     else:
       self.dataset = ImageFolder(
         src,
