@@ -70,7 +70,7 @@ class StanfordModel(nn.Module):
                 tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
                 batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
 
-                loss_list += [batch_loss/batch_cnt]
+                avg_loss_list += [batch_loss/batch_cnt]
 
                 # 배치 결과 합산
                 epoch_cor_cnt += batch_cor
