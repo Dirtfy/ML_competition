@@ -55,22 +55,21 @@ class StanfordModel(nn.Module):
         
         best_acc = 0
         best_ep = 0
-        for ep in range(epoch):            
+        bad_threshold = 100
+        for ep in range(epoch):
             epoch_cor_cnt = 0
             epoch_loss_sum = 0.0
 
-            datas_list = []
-            avg_loss_list = []
+            bad_datas = []
             for j, datas in enumerate(dataloader):
-                datas_list += [datas]
-
                 self.train_step(datas, optimizer, criterion)
 
                 # 배치 결과 계산
                 tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
                 batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
 
-                avg_loss_list += [batch_loss/batch_cnt]
+                if batch_loss/batch_cnt >= bad_threshold:
+                    bad_datas += [datas]
 
                 # 배치 결과 합산
                 epoch_cor_cnt += batch_cor
@@ -86,10 +85,7 @@ class StanfordModel(nn.Module):
             early.train_loss_list += [epoch_loss_sum/epoch_cnt]
             early.train_acc_list += [epoch_cor_cnt/epoch_cnt]
 
-            bad_datas = []
-            for j, data in enumerate(datas_list):
-                if avg_loss_list[j] >= (epoch_loss_sum/epoch_cnt)*2:
-                    bad_datas += [data]
+            bad_threshold = (epoch_loss_sum/epoch_cnt)*2
 
             bad_repeat = 100
             for j, datas in enumerate(bad_datas):
