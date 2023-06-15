@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import copy
 
-from . import util
-from . import stopper
+import util
+import stopper
 
 class StanfordModel(nn.Module):
     def __init__(self, device='cpu'):
@@ -14,9 +14,9 @@ class StanfordModel(nn.Module):
         self.__num_classes = 120
         self.device = device
 
-        self.backbone = timm.create_model('convit_base', pretrained=True).to(device)
+        # self.backbone = timm.models.convit.convit_base(pretrained=True).to(device)
         # self.backbone = timm.create_model('deit_base_distilled_patch16_384', pretrained=True).to(device)
-        # self.backbone = timm.create_model('resnet200d', pretrained=True).to(device)
+        self.backbone = timm.create_model('resnet200d', pretrained=True).to(device)
         self.head = nn.Sequential(
             nn.BatchNorm1d(num_features=1000),
             nn.Linear(in_features=1000, out_features=512),
@@ -55,59 +55,48 @@ class StanfordModel(nn.Module):
         
         best_acc = 0
         best_ep = 0
-        bad_threshold = 100
         for ep in range(epoch):
+            self.train()
+            
             epoch_cor_cnt = 0
             epoch_loss_sum = 0.0
-
-            bad_datas = []
             for j, datas in enumerate(dataloader):
-                self.train_step(datas, optimizer, criterion)
+                self.train()
+                
+                images, labels = datas
+                images = images.to(self.device)
+                labels = labels.to(self.device)
+
+                optimizer.zero_grad()
+
+                # 순전파 + 역전파 + 최적화
+                outputs = self.forward(images)
+                loss = criterion(outputs.squeeze(), labels.squeeze())
+                loss.backward()
+                optimizer.step()
 
                 # 배치 결과 계산
                 tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
                 batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
 
-                if batch_loss/batch_cnt >= bad_threshold:
-                    bad_datas += [datas]
-
                 # 배치 결과 합산
                 epoch_cor_cnt += batch_cor
                 epoch_loss_sum += batch_loss
                 # 배치 결과 출력
-                print(f'[epoch: {ep + 1:3d}, batch: {j + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt:.6f}, batch_acc: {batch_cor/batch_cnt:.6f}, train_acc: {epoch_cor_cnt/epoch_cnt:.6f}')
+                print(f'[epoch: {ep + 1}, batch: {j + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt}, batch_acc: {batch_cor/batch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
             
             # learning rate 출력
             print('lr: ', optimizer.param_groups[0]['lr'])
 
             # 에포크 결과 출력
-            print(f'[epoch: {ep + 1:3d}] train_avg_loss: {epoch_loss_sum/epoch_cnt:.6f}, train_acc: {epoch_cor_cnt/epoch_cnt:.6f}')
+            print(f'[epoch: {ep + 1}] train_avg_loss: {epoch_loss_sum/epoch_cnt}, train_acc: {epoch_cor_cnt/epoch_cnt}')
             early.train_loss_list += [epoch_loss_sum/epoch_cnt]
             early.train_acc_list += [epoch_cor_cnt/epoch_cnt]
-
-            bad_threshold = (epoch_loss_sum/epoch_cnt)*2
-
-            bad_repeat = 100
-            for j, datas in enumerate(bad_datas):
-                tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
-                batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
-                if batch_loss/batch_cnt < bad_threshold:
-                    continue
-                
-                for k in range(bad_repeat):
-                    self.train_step(datas, optimizer, criterion)
-
-                    # 배치 결과 계산
-                    tmp_dataset = [(datas[0][i], datas[1][i]) for i in range(len(datas[0]))]
-                    batch_loss, batch_cor, batch_cnt = self.test(tmp_dataset)
-
-                    # 배치 결과 출력
-                    print(f'[epoch: {ep + 1:3d}, batch: {j + 1:5d}, bad_repeat: {k + 1:5d}], batch_avg_loss: {batch_loss/batch_cnt:.6f}, batch_acc: {batch_cor/batch_cnt:.6f}')
 
             # test_dataset 결과 계산 및 출력
             print('evaluating...')
             test_loss, test_cor, test_cnt = self.test(test_set)
-            print(f'[epoch: {ep + 1:3d}] test_avg_loss: {test_loss/test_cnt:.6f}, test_acc: {test_cor/test_cnt:.6f}')
+            print(f'[epoch: {ep + 1}] test_avg_loss: {test_loss/test_cnt}, test_acc: {test_cor/test_cnt}')
             early.test_loss_list += [test_loss/test_cnt]
             early.test_acc_list += [test_cor/test_cnt]
 
@@ -127,21 +116,6 @@ class StanfordModel(nn.Module):
         # 모델 저장
         util.save_train_result(self, path, name+'_end', optimizer, criterion, batch_size, shuffle, epoch, best_ep, early, ls, wd, pt)   
         torch.save(best_acc_model, path+"/"+name+"_best.pt") 
-
-    def train_step(self, datas, optimizer, criterion):
-        self.train()
-
-        images, labels = datas
-        images = images.to(self.device)
-        labels = labels.to(self.device)
-
-        optimizer.zero_grad()
-
-        # 순전파 + 역전파 + 최적화
-        outputs = self.forward(images)
-        loss = criterion(outputs.squeeze(), labels.squeeze())
-        loss.backward()
-        optimizer.step()
 
     def test(self, dataset, criterion=None, prt=False):
         if criterion == None:
@@ -173,10 +147,10 @@ class StanfordModel(nn.Module):
                 total_cnt += 1
 
                 if prt:
-                    print(f'[{i + 1:5d}] loss: {loss.item():}, accuracy: {correct_top1/total_cnt:.6f}')
+                    print(f'[{i + 1}] loss: {loss.item():}, accuracy: {correct_top1/total_cnt}')
 
         if prt:
-            print(f'average loss : {loss_sum/total_cnt:.6f}, accuracy : {correct_top1/total_cnt:.6f}')
+            print(f'average loss : {loss_sum/total_cnt}, accuracy : {correct_top1/total_cnt}')
 
         return loss_sum, correct_top1, total_cnt
 
